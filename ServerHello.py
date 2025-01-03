@@ -15,13 +15,10 @@ class ServerHello:
         self.extensions = {}
         self.server_pub_key = None
         logging.basicConfig(level=logging.INFO)
-        logger = logging.getLogger()
 
     def do(self, msg):
         """
         Parses the ServerHello message and extracts relevant fields, including the server's ECDH public key.
-
-        :param msg: The ServerHello message received from the server.
         """
         try:
             print("MESSAGE:" + str(msg))
@@ -63,11 +60,6 @@ class ServerHello:
             raise
 
     def _parse_extensions(self, extensions_data):
-        """
-        Parses the extensions in the ServerHello message.
-
-        :param extensions_data: Raw bytes of the extensions.
-        """
         offset = 0
         while offset < len(extensions_data):
             extension_type = int.from_bytes(extensions_data[offset:offset+2], 'big')
@@ -83,11 +75,6 @@ class ServerHello:
                 self._extract_key_share(extension_value)
 
     def _extract_key_share(self, key_share_data):
-        """
-        Extracts the server's public key from the Key Share extension.
-
-        :param key_share_data: Raw bytes of the Key Share extension.
-        """
         try:
             curve_type = key_share_data[:2]  # Curve type (2 bytes)
             key_length = int.from_bytes(key_share_data[2:4], 'big')  # Key length (2 bytes)
@@ -99,11 +86,6 @@ class ServerHello:
             raise
 
     def getPub(self):
-        """
-        Retrieves the server's ECDH public key.
-
-        :return: The server's ECDH public key.
-        """
         if self.server_pub_key is None:
             raise ValueError("Server public key has not been set. Call do(msg) first.")
         return self.server_pub_key

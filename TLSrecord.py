@@ -44,7 +44,7 @@ class TLSrecord:
 
         # Read the payload
         data = self._recv_exact(length)
-        return content_type, data
+        return header, data
 
     def _recv_exact(self, n: int) -> bytes:
         """
