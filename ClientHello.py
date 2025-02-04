@@ -8,6 +8,8 @@ from cryptography.hazmat.primitives.serialization import (
     NoEncryption,
 )
 
+from KeySchedule import KeySchedule
+
 class ClientHello:
     def __init__(self):
         self.legacy_version = 0x0303  # ProtocolVersion
@@ -16,6 +18,8 @@ class ClientHello:
         self.cipher_suites = [0x1301]  # TLS_AES_128_GCM_SHA256 (example cipher suite)
         self.legacy_compression_methods = [0x00]  # NULL compression method
         self.private_key = None  # To store the ECDH private key
+        self.supported_groups = [0x0017] # secp256r1
+        self.signature_algorithms = [0x0804] # rsa_pss_rsae_sha256
 
     def make(self):
         # Build the non-extension part of ClientHello
@@ -32,31 +36,57 @@ class ClientHello:
 
         # Add extensions
         extensions = self._build_extensions()
-        client_hello_message = client_hello_base + struct.pack('!H', len(extensions)) + extensions
-        return client_hello_message
+        cl_hello_payload = client_hello_base + struct.pack('!H', len(extensions)) + extensions
+        #cl_hello_msg = hs_header(1, len(cl_hello_payload)) + cl_hello_payload
+        # self.key_sched.addMsg(cl_hello_msg)
+        return cl_hello_payload
 
     def _build_extensions(self):
         # Use TLSextention.make to build each extension
         extensions = []
+
+        # server_name
+        # server_name_str = "server".encode()
+        # base_server_name = b'\x00' + len(server_name_str).to_bytes(2, 'big') + server_name_str
+        # server_name = struct.pack('!H', len(base_server_name)) + base_server_name
+        # extensions.append(self._make_extension(0, server_name))
+
+        # renegotiation_info
+        # base_renegotiation_info = b"\x00"
+        # renegotiation_info = base_renegotiation_info # No length
+        # extensions.append(self._make_extension(65281, renegotiation_info))
+
+        # supported_groups
+        supported_groups = struct.pack('!H', len(self.supported_groups) * 2) + b''.join(struct.pack('!H', sg) for sg in self.supported_groups)
+        extensions.append(self._make_extension(10, supported_groups))
+
+        # session_ticket
+        # session_ticket = b""
+        # extensions.append(self._make_extension(35, session_ticket))
+
+        # key_share
+        key_share_data = self._make_key_share()
+        extensions.append(self._make_extension(51, key_share_data))
 
         # supported_versions
         supported_versions = struct.pack('!B', len(b'\x03\x04')) + b'\x03\x04'  # Length 1 byte + TLS 1.3
         extensions.append(self._make_extension(43, supported_versions))
 
         # signature_algorithms
-        signature_algorithms = struct.pack('!H', len(b'\x08\x04')) + b'\x08\x04'  # rsa_pss_rsae_sha256
+        signature_algorithms = struct.pack('!H', len(self.signature_algorithms) * 2) + b''.join(struct.pack('!H', sa) for sa in self.signature_algorithms)
         extensions.append(self._make_extension(13, signature_algorithms))
 
-        # supported_groups
-        supported_groups = struct.pack('!H', len(b'\x00\x17')) + b'\x00\x17'  # secp256r1
-        extensions.append(self._make_extension(10, supported_groups))
+        # psk_key_exchange_modes
+        # psk_key_exchange_mode = struct.pack('!B', len(b'\x01')) + b'\x01' # psk_dhe_ke
+        # extensions.append(self._make_extension(45, psk_key_exchange_mode))
+
+        # recode_size_limit
+        # recode_size_limit = int(16385).to_bytes(2, 'big')
+        # recode_size_limit_data = recode_size_limit
+        # extensions.append(self._make_extension(28, recode_size_limit_data))
 
         # encrypt_then_mac
         extensions.append(self._make_extension(22, b''))
-
-        # key_share
-        key_share_data = self._make_key_share()
-        extensions.append(self._make_extension(51, key_share_data))
 
         # Combine all extensions
         return b''.join(extensions)

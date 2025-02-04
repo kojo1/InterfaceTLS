@@ -1,6 +1,30 @@
 import struct
 import socket
 
+def tls_header(content_type: int, data_len: int):
+    """
+    Create TLS record header.
+    
+    :param content_type: Content type (e.g., 22 for handshake, 23 for application data).
+    :param data_len: The length of data to send.
+    """
+    version = 0x0303  # TLS 1.2 or 1.3 (use the same record version for both)
+
+    if data_len > 2**14:
+        raise ValueError("Data too large for a single TLS record.")
+
+    # Create the TLS record header
+    header = struct.pack('!BHH', content_type, version, data_len)
+    return header
+
+def separate_tls_msg(tls_msg: bytes):
+    content_type = tls_msg[0]
+    version = tls_msg[1:3]
+    data_len = tls_msg[3:5]
+    data = tls_msg[5:]
+
+    return content_type, version, data_len, data
+
 class TLSrecord:
     def __init__(self, sock: socket.socket):
         """
@@ -10,24 +34,16 @@ class TLSrecord:
         """
         self.sock = sock
 
-    def send(self, content_type: int, data: bytes):
+#    def send(self, header: bytes, data: bytes):
+    def send(self, tls_msg: bytes):
         """
         Send data with a TLS record header.
         
-        :param content_type: Content type (e.g., 22 for handshake, 23 for application data).
+        :param header: The header of data to send. It's created by self.header().
         :param data: The data to send.
         """
-        version = 0x0303  # TLS 1.2 or 1.3 (use the same record version for both)
-        length = len(data)
-
-        if length > 2**14:
-            raise ValueError("Data too large for a single TLS record.")
-
-        # Create the TLS record header
-        header = struct.pack('!BHH', content_type, version, length)
-
         # Send the header and data
-        self.sock.sendall(header + data)
+        self.sock.sendall(tls_msg)
 
     def recv(self):
         """
@@ -44,7 +60,8 @@ class TLSrecord:
 
         # Read the payload
         data = self._recv_exact(length)
-        return header, data
+        # return header, data
+        return header + data
 
     def _recv_exact(self, n: int) -> bytes:
         """
