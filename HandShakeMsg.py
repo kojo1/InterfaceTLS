@@ -14,17 +14,6 @@ def separate_hs_msg(hs_msg: bytes):
     
     return hs_type, hs_payload_len, hs_payload
 
-def dump_hex(title: str, bin: bytes):
-    print(f"{title}: ")
-    loops = 0
-    for b in bin:
-        loops += 1
-        print(f" {b:02x}", end="")
-        if loops == 16:
-            print("")
-            loops = 0
-    print("")
-
 class PlainMsg:
     def __init__(self, socket, key_sched):
         self.tls_record = TLSrecord(socket)
@@ -140,7 +129,6 @@ class CryptoMsg:
 
         self.key_sched.addMsg(content)
         self.recNum += 1
-        # dump_hex("test", content)
         
         return content
 

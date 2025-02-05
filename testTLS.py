@@ -2,7 +2,7 @@
 
 import logging
 import socket
-from HandShakeMsg import dump_hex
+from debug import dump_hex
 
 #from TLSrecord import TLSrecord
 from HandShakeMsg import HandShakeMsg, CryptoHandShakeMsg, AppMsg
