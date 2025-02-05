@@ -79,4 +79,3 @@ logger.debug(f"Server Handshake Key : {''.join(f'{byte:02x}' for byte in s_hs_ke
 
 s_hs_iv = keySched.get_s_hs_iv()
 logger.debug(f"Server Handshake IV : {''.join(f'{byte:02x}' for byte in s_hs_iv )}")
-
