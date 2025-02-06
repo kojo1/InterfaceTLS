@@ -1,119 +1,187 @@
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
-from TLSrecord import TLSrecord
 from KeySchedule import KeySchedule
+from TLSrecord import TLSrecord, tls_header, separate_tls_msg
+
+def hs_header(hs_type: int, hs_payload_len: int):
+    return hs_type.to_bytes(1, 'big') + hs_payload_len.to_bytes(3, 'big')
+
+def separate_hs_msg(hs_msg: bytes):
+    hs_type = hs_msg[0]
+    hs_payload_len = hs_msg[1:4]
+    hs_payload = hs_msg[4:]
+    
+    return hs_type, hs_payload_len, hs_payload
+
+class PlainMsg:
+    def __init__(self, socket, key_sched):
+        self.tls_record = TLSrecord(socket)
+        self.key_sched = key_sched
+
+    def send(self, content_type: int, tls_payload: bytes):
+        self.tls_record.send(tls_header(content_type, len(tls_payload)) + tls_payload)
+        self.key_sched.addMsg(tls_payload)
+
+    def recv(self, expected_content_type: int):
+        content_type, version, tls_payload_len, tls_payload = separate_tls_msg(self.tls_record.recv())
+        if content_type != expected_content_type:
+            raise ValueError("Unexpected content type: {}".format(content_type)) 
+        self.key_sched.addMsg(tls_payload)
+        
+        return tls_payload
 
 class HandShakeMsg:
-    def __init__(self, socket, keySched):
+    def __init__(self, socket, key_sched):
         """
         コンストラクタ
         :param socket: ソケットオブジェクト
         """
-        self.socket = socket
-        self.tls_record = TLSrecord(socket)
-        self.keySched = keySched
-        self.key = None
-        self.base_iv = None
-        self.recNum = 0
+        self.plain = PlainMsg(socket, key_sched)
 
-    def send(self, handshake_type, content):
+    def send(self, hs_type: int, hs_payload: bytes):
         """
         ハンドシェークメッセージを送信する
         :param handshake_type: ハンドシェークメッセージタイプ (例: ClientHello, ServerHelloなど)
         :param content: ハンドシェークメッセージの内容 (bytes)
         """
-        # ハンドシェークメッセージを作成
-        handshake_header = handshake_type.to_bytes(1, 'big') + len(content).to_bytes(3, 'big')
-        handshake_message = handshake_header + content
+        tls_payload = hs_header(hs_type, len(hs_payload)) + hs_payload
+        self.plain.send(22, tls_payload)
 
-        # TLS Recordに送信を委譲
-        self.tls_record.send(22, handshake_message)  # 22はHandshakeのレコードタイプ
-        self.keySched.addMsg(handshake_message)
+    def recv(self, expected_hs_type: int):
+        # TLS Recordから受信を委譲
+        tls_payload = self.plain.recv(22)
+        hs_type, hs_payload_len, hs_payload = separate_hs_msg(tls_payload)
+        if hs_type != expected_hs_type:
+            raise ValueError("Unexpected handshake type: {}".format(hs_type))
 
-    def sendEnc(self, type, content, key, iv):
-        handshake_header = handshake_type.to_bytes(1, 'big') + len(content).to_bytes(3, 'big')
-        handshake_message = handshake_header + content
+        # ハンドシェークメッセージを解析
+        #if len(content) != length:
+        #    raise ValueError("Handshake message length mismatch")
 
+        return hs_payload
+
+def encrypt(key, iv, record_header, record_content):
         backend = default_backend()
         cipher = Cipher(algorithms.AES(key), modes.GCM(iv), backend=backend)
         encryptor = cipher.encryptor()
+        encryptor.authenticate_additional_data(record_header)
+        ciphertext = encryptor.update(record_content) + encryptor.finalize()
+        auth_tag = encryptor.tag
 
+        return ciphertext, auth_tag
 
-    def recv(self):
-        # TLS Recordから受信を委譲
-        record_header, record_content = self.tls_record.recv()
-        print("Message: " + record_header.hex() + "," + record_content.hex())
+def decrypt(key, iv, record_header, record_content):
+    auth_tag = record_content[-16:]  # 最後の16バイトがauth_tag
+    ciphertext = record_content[:-16]  # 残りが暗号化されたペイロード
+    backend = default_backend()
+    cipher = Cipher(algorithms.AES(key), modes.GCM(iv, auth_tag), backend=backend)
+    decryptor = cipher.decryptor()
+    decryptor.authenticate_additional_data(record_header)
+    plainText = decryptor.update(ciphertext) + decryptor.finalize()
 
-        record_type = record_header[0]
-        if record_type != 22:  # 22はHandshakeのレコードタイプ
-            raise ValueError("Unexpected record type: {}".format(record_type))
+    return plainText
 
-        # ハンドシェークメッセージを解析
-        handshake_type = record_content[0]
-        length = int.from_bytes(record_content[1:4], 'big')
-        content = record_content[4:4 + length]
+class CryptoMsg:
+    def __init__(self, socket, key_sched):
+        self.tls_record = TLSrecord(socket)
+        self.key_sched = key_sched
+        self.recNum = 0
+        self.sendNum = 0
+        self.c_key_iv = None
+        self.s_key_iv = None
 
-        if len(content) != length:
-            raise ValueError("Handshake message length mismatch")
+    def set_keys_and_ivs(self, c_key_iv, s_key_iv):
+        self.c_key_iv = c_key_iv
+        self.s_key_iv = s_key_iv
 
-        self.keySched.addMsg(record_content)
+    def send(self, content_type1:int, content_type2: int, payload: bytes):
+        tls_h = tls_header(content_type1, len(payload) + 1 + 16)
+        c_key, c_iv = self.c_key_iv
+        cipher_text, auth_tag = encrypt(
+            c_key,
+            self.key_sched.record_iv(c_iv, self.sendNum), # record_iv() doesn't have to be in KeySchedule class.
+            tls_h,
+            payload + content_type2.to_bytes(1, 'big')
+        )
+        self.tls_record.send(tls_h + cipher_text + auth_tag)
+        self.key_sched.addMsg(payload)
+        self.sendNum += 1
 
-        return handshake_type, content
-    
-    def set_s_hs_key(self, key, iv):
-        self.key = key
-        self.base_iv = iv
+    def recv(self, expected_content_type1: int, expected_content_type2:int):
+        content_type1, version, tls_payload_len, tls_payload = separate_tls_msg(self.tls_record.recv())
+        if content_type1 != expected_content_type1:
+            raise ValueError("Unexpected content_type1: {}".format(content_type1))
 
-    def record_iv(self):
-        """
-        Calculate record IV using base IV and sequence number.
-        :param base_iv: Base IV (12 bytes)
-        :param sequence_number: Sequence number (int)
-        :return: Record IV (12 bytes)
-        """
-        # シーケンス番号を 8 バイトに変換し、`base_iv` の最後の 8 バイトと XOR
-        seq_bytes = self.recNum.to_bytes(8, 'big')
-        iv = bytearray(self.base_iv)
-        for i in range(8):
-            iv[-8 + i] ^= seq_bytes[i]
-        return bytes(iv)
+        tls_header = content_type1.to_bytes(1, 'big') + version + tls_payload_len # This is redundant
+        s_key, s_iv = self.s_key_iv
+        plain_text = decrypt(
+            s_key,
+            self.key_sched.record_iv(s_iv, self.recNum),
+            tls_header,
+            tls_payload
+        )
 
-    def recvDec(self):
-        # TLS Recordから受信を委譲
-        record_header, record_content = self.tls_record.recv()
-        print("Encrypted Message: " + record_header.hex() + "," + record_content[:32].hex())
+        content = plain_text[:-1]
+        content_type2 = int.from_bytes(plain_text[-1:], 'big')
+        if content_type2 != expected_content_type2:
+            raise ValueError("Unexpected content_type2: {}".format(content_type2))
 
-        record_type = record_header[0]
-        if record_type != 23:  # Application Record
-            raise ValueError("Unexpected record type: {}".format(record_type))
-        
-        auth_tag = record_content[-16:]  # 最後の16バイトがauth_tag
-        ciphertext = record_content[:-16]  # 残りが暗号化されたペイロード
-        
-        print(f"Auth Tag: {auth_tag.hex()}")
-        print(f"ciphertext: {ciphertext[:32].hex()}")
-        print(f"key: {self.key.hex()}")
-        print(f"IV: {self.record_iv().hex()}")
-        print(f"Record Number: {self.recNum}")
-
-        backend = default_backend()
-        cipher = Cipher(algorithms.AES(self.key), modes.GCM(self.record_iv(), auth_tag), backend=backend)
-        decryptor = cipher.decryptor()
-
-        decryptor.authenticate_additional_data(record_header)
-        plainText = decryptor.update(ciphertext) + decryptor.finalize()
-
-        # ハンドシェークメッセージを解析
-        handshake_type = plainText[0]
-        length = int.from_bytes(plainText[1:4], 'big')
-        content = plainText[4:4 + length]
-
-        if len(content) != length:
-            raise ValueError("Handshake message length mismatch")
-
-        self.keySched.addMsg(record_content)
+        self.key_sched.addMsg(content)
         self.recNum += 1
+        
+        return content
 
-        return handshake_type, content
+class CryptoHandShakeMsg:
+    def __init__(self, socket, key_sched: KeySchedule):
+        self.key_sched = key_sched
+        self.crypto = CryptoMsg(socket, key_sched)
+
+    def calc_keys_and_ivs(self):
+        self.key_sched.set_early_secret()
+        self.key_sched.set_derived_secret()
+        self.key_sched.set_hs_secret()
+        self.key_sched.set_s_hs_traffic()
+        self.key_sched.set_c_hs_traffic()
+        self.key_sched.set_s_hs_key_iv()
+        self.key_sched.set_c_hs_key_iv()
+        self.key_sched.set_s_finished()
+        self.key_sched.set_c_finished()
+
+        self.crypto.set_keys_and_ivs(self.key_sched.get_c_hs_key_iv(), self.key_sched.get_s_hs_key_iv())
+
+    def send(self, hs_type: int, hs_payload: bytes):
+        tls_payload = hs_header(hs_type, len(hs_payload)) + hs_payload
+        self.crypto.send(23, 22, tls_payload)
+
+    def recv(self, expected_hs_type: int):
+        tls_payload = self.crypto.recv(23, 22)
+        hs_type, hs_payload_len, hs_payload = separate_hs_msg(tls_payload)
+        if hs_type != expected_hs_type:
+            raise ValueError("Unexpected hs_type: {}".format(hs_type))
+        return hs_payload
+    
+class AppMsg:
+    def __init__(self, socket, key_sched):
+        """
+        コンストラクタ
+        :param socket: ソケットオブジェクト
+        """
+        self.key_sched = key_sched
+        self.crypto = CryptoMsg(socket, key_sched)
+
+    def calc_keys_and_ivs(self):
+        self.key_sched.set_master_secret()
+        self.key_sched.set_c_app_traffic()
+        self.key_sched.set_s_app_traffic()
+        self.key_sched.set_c_app_key_iv()
+        self.key_sched.set_s_app_key_iv()
+
+        self.crypto.set_keys_and_ivs(self.key_sched.get_c_app_key_iv(), self.key_sched.get_s_app_key_iv())
+
+    def send(self, app_type: int, app_payload: bytes): # from here
+        self.crypto.send(23, app_type, app_payload)
+
+    def recv(self, expected_app_type: int):
+        app_payload = self.crypto.recv(23, expected_app_type)
+        return app_payload

@@ -1,9 +1,4 @@
 import logging
-from HandShakeMsg import HandShakeMsg
-from ClientHello import ClientHello
-
-CLIENT_HELLO = 1
-SERVER_HELLO = 2
 
 class ServerHello:
     def __init__(self):

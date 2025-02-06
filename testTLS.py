@@ -1,10 +1,14 @@
+#!python3
+
 import logging
 import socket
+from debug import dump_hex
 
 #from TLSrecord import TLSrecord
-from HandShakeMsg import HandShakeMsg
+from HandShakeMsg import HandShakeMsg, CryptoHandShakeMsg, AppMsg
 from ClientHello import ClientHello
 from ServerHello import ServerHello
+from Finished import Finished
 from KeySchedule import KeySchedule
 from KeyExchange import KeyExchange
 
@@ -16,42 +20,53 @@ logging.basicConfig(
 
 sock = socket.create_connection(("localhost", 11111))
 
+transcript = b""
+
+# Content Types
+ALERT = 21
+APPLICATION_DATA = 23
+
+# Handshake Types
 CLIENT_HELLO = 1
 SERVER_HELLO = 2
+ENCRYPTED_EXTENTIONS = 8
+CERTIFICATE = 11
+CERTIFICATE_VERIFY = 15
+FINISHED = 20
 
+keySched = KeySchedule()
 cl_hello = ClientHello()
 sv_hello = ServerHello()
-keySched   = KeySchedule()
+finished = Finished(keySched)
 keyEx    = KeyExchange(keySched)
 hsMsg    = HandShakeMsg(sock, keySched)
-
-keySched.get_early_secret() # No PSK
-keySched.get_derived_secret()
+chsMsg   = CryptoHandShakeMsg(sock, keySched)
+appMsg   = AppMsg(sock, keySched)
 
 # Start hadnshake for a TLS connection
+hsMsg.send(CLIENT_HELLO, cl_hello.make())               # Send ClientHello
 
-hsMsg.send(CLIENT_HELLO, cl_hello.make())   # Send ClientHello
-type, msg = hsMsg.recv()                    # Receive ServerHello
-if type != SERVER_HELLO:
-    logger.info("Invalid message type")
-    exit
-sv_hello.do(msg)                            # Parse ServerHello
-keyEx.doExchange(cl_hello.getPriv(), sv_hello.getPub())
-                                            # Key Exchange
-# Derive key, IV for Server Handshake
-key = keySched.get_s_hs_key()
-iv  = keySched.get_s_hs_iv()
-hsMsg.set_s_hs_key(key, iv)
+sv_hello_msg = hsMsg.recv(SERVER_HELLO)                 # Receive ServerHello
+sv_hello.do(sv_hello_msg)                               # Parse ServerHello
 
-type, msg = hsMsg.recvDec()                 # Encrypted Server Hello
-print("Message: " + msg.hex())
+keyEx.doExchange(cl_hello.getPriv(), sv_hello.getPub()) # Key Exchange
 
-type, msg = hsMsg.recvDec()                 # Certificate
-print("Message: " + msg[:32].hex())
+chsMsg.calc_keys_and_ivs()
 
-type, msg = hsMsg.recvDec()                 # Verify Certificate
-print("Message: " + msg[:32].hex())
+enc_exts_msg = chsMsg.recv(ENCRYPTED_EXTENTIONS)        # Receive Encrypted Server Hello
+cert_msg = chsMsg.recv(CERTIFICATE)                     # Receive Certificate
+cert_verify_msg = chsMsg.recv(CERTIFICATE_VERIFY)       # Verify Certificate
 
-type, msg = hsMsg.recvDec()                 # Server Hello Done
-print("Message: " + msg[:32].hex())
+finished.set_expected_verify_data()
+finished_msg = chsMsg.recv(FINISHED)                    # Server Finished
+finished.do(finished_msg)
 
+appMsg.calc_keys_and_ivs()
+
+chsMsg.send(FINISHED, finished.make()) # Client Finished
+
+appMsg.send(APPLICATION_DATA, b"Hello")
+dump_hex("App Data from Server", appMsg.recv(APPLICATION_DATA))
+
+dump_hex("App Data from Server", appMsg.recv(ALERT))
+appMsg.send(ALERT, bytes.fromhex("01 00"))

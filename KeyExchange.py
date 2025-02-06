@@ -27,9 +27,5 @@ class KeyExchange:
         # Perform ECDH to derive the shared secret
         shared_sec = priv_key.exchange(ec.ECDH(), pub_key)
         print(shared_sec.hex())
+
         self.keySched.set_shared_secret(shared_sec)
-        self.keySched.get_hs_secret()
-        s_hs = self.keySched.get_s_hs_traffic()
-        c_hs = self.keySched.get_c_hs_traffic()
-        logging.debug(f"s hs traffic Secret : {''.join(f'{byte:02x}' for byte in s_hs )}")
-        logging.debug(f"c hs traffic Secret : {''.join(f'{byte:02x}' for byte in c_hs )}")
