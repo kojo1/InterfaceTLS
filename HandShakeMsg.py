@@ -1,5 +1,4 @@
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
+from wolfcrypt.ciphers import AesGcmStream
 
 from KeySchedule import KeySchedule
 from TLSrecord import TLSrecord, tls_header, separate_tls_msg
@@ -62,23 +61,19 @@ class HandShakeMsg:
         return hs_payload
 
 def encrypt(key, iv, record_header, record_content):
-        backend = default_backend()
-        cipher = Cipher(algorithms.AES(key), modes.GCM(iv), backend=backend)
-        encryptor = cipher.encryptor()
-        encryptor.authenticate_additional_data(record_header)
-        ciphertext = encryptor.update(record_content) + encryptor.finalize()
-        auth_tag = encryptor.tag
+        aes_gcm = AesGcmStream(key, iv, 16)
+        aes_gcm.set_aad(record_header)
+        ciphertext = aes_gcm.encrypt(record_content)
+        auth_tag = aes_gcm.final()
 
         return ciphertext, auth_tag
 
 def decrypt(key, iv, record_header, record_content):
     auth_tag = record_content[-16:]  # 最後の16バイトがauth_tag
     ciphertext = record_content[:-16]  # 残りが暗号化されたペイロード
-    backend = default_backend()
-    cipher = Cipher(algorithms.AES(key), modes.GCM(iv, auth_tag), backend=backend)
-    decryptor = cipher.decryptor()
-    decryptor.authenticate_additional_data(record_header)
-    plainText = decryptor.update(ciphertext) + decryptor.finalize()
+    aes_gcm = AesGcmStream(key, iv, 16)
+    aes_gcm.set_aad(record_header)
+    plainText = aes_gcm.decrypt(ciphertext)
 
     return plainText
 
