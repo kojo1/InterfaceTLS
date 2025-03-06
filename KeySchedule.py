@@ -1,9 +1,16 @@
-import hmac
-import hashlib
+from wolfcrypt.hashes import Sha256, HmacSha256
+
+def _get_hmac_algo(hashAlgo):
+    if hashAlgo == Sha256:
+        return HmacSha256
+    else:
+        raise ValueError("Unsupported hash algorithm")
 
 class KeySchedule:
-    def __init__(self, hashAlgo=hashlib.sha256):
+    def __init__(self, hashAlgo=Sha256):
         self.hashAlgo = hashAlgo
+        self.digest_size = hashAlgo.digest_size
+        self.hmacAlgo = _get_hmac_algo(hashAlgo)
         self.early_secret = None # 属性名を変更
         self.derived_secret = None
         self.hs_secret = None
@@ -19,7 +26,7 @@ class KeySchedule:
 
     def hkdf_extract(self, salt, ikm):
         """HKDF Extract フェーズ"""
-        return hmac.new(salt, ikm, self.hashAlgo).digest()
+        return self.hmacAlgo(salt, ikm).digest()
 
     def hkdf_expand_label(self, secret, label, ctx, length):
         """
@@ -50,7 +57,7 @@ class KeySchedule:
         :param length: 必要な出力長
         :return: 長さ指定の鍵またはデータ
         """
-        hash_len = self.hashAlgo().digest_size
+        hash_len = self.digest_size
         n = (length + hash_len - 1) // hash_len  # 必要なブロック数
         if n > 255:
             raise ValueError("Too large length for HKDF-Expand")
@@ -58,11 +65,7 @@ class KeySchedule:
         output = b""
         previous_block = b""
         for i in range(1, n + 1):
-            previous_block = hmac.new(
-                secret,
-                previous_block + info + bytes([i]),
-                self.hashAlgo
-            ).digest()
+            previous_block = self.hmacAlgo(secret, previous_block + info + bytes([i])).digest()
             output += previous_block
         return output[:length]
     
@@ -76,8 +79,8 @@ class KeySchedule:
         PSK (pre-shared key) がない場合はゼロバイト列を使用。
         """
         if not psk:
-            psk = b'\x00' * self.hashAlgo().digest_size
-        salt = b'\x00' * self.hashAlgo().digest_size
+            psk = b'\x00' * self.digest_size
+        salt = b'\x00' * self.digest_size
         self.early_secret = self.hkdf_extract(salt, psk)
 
     def set_derived_secret(self):
@@ -88,7 +91,7 @@ class KeySchedule:
         print("hash: " + str({''.join(f'{byte:02x}' for byte in hash )}))
 
         self.derived_secret = self.hkdf_expand_label(
-            self.early_secret, b"derived", hash, self.hashAlgo().digest_size
+            self.early_secret, b"derived", hash, self.digest_size
         )
 
     def set_hs_secret(self):
@@ -118,7 +121,7 @@ class KeySchedule:
         if not self.hs_secret:
             raise ValueError("Handshake secret must be computed before client handshake traffic secret.")
         self.c_hs_traffic = self.hkdf_expand_label(
-            self.hs_secret, b"c hs traffic", self.digest, self.hashAlgo().digest_size
+            self.hs_secret, b"c hs traffic", self.digest, self.digest_size
         )
     
     def set_s_hs_traffic(self):
@@ -129,7 +132,7 @@ class KeySchedule:
             raise ValueError("Handshake secret must be computed before server handshake traffic secret.")
     
         self.s_hs_traffic = self.hkdf_expand_label(
-            self.hs_secret, b"s hs traffic", self.digest, self.hashAlgo().digest_size
+            self.hs_secret, b"s hs traffic", self.digest, self.digest_size
         )
 
     def set_s_hs_key_iv(self):
@@ -159,7 +162,7 @@ class KeySchedule:
             raise ValueError("Client Handshake Secret must be computed before Client Finished")
 
         self.c_finished = self.hkdf_expand_label(
-           self.c_hs_traffic, b"finished", b"", self.hashAlgo().digest_size 
+           self.c_hs_traffic, b"finished", b"", self.digest_size 
         )
 
     def set_s_finished(self):
@@ -167,7 +170,7 @@ class KeySchedule:
             raise ValueError("Server Handshake Secret must be computed before Server Finished")
 
         self.s_finished = self.hkdf_expand_label(
-           self.s_hs_traffic, b"finished", b"", self.hashAlgo().digest_size 
+           self.s_hs_traffic, b"finished", b"", self.digest_size 
         )
 
     def get_s_finished(self):
@@ -184,7 +187,7 @@ class KeySchedule:
             raise ValueError("Handshake secret must be computed before secret for master.")
     
         self.secret_for_master = self.hkdf_expand_label(
-            self.hs_secret, b"derived", self.hashAlgo(b"").digest(), self.hashAlgo().digest_size
+            self.hs_secret, b"derived", self.hashAlgo(b"").digest(), self.digest_size
         )
         return self.secret_for_master
 
@@ -203,7 +206,7 @@ class KeySchedule:
             raise ValueError("master secret must be computed before client_application_traffic_secret_0.")
     
         self.c_app_traffic = self.hkdf_expand_label(
-            self.master_secret, b"c ap traffic", self.hashAlgo(self.transcript).digest(), self.hashAlgo().digest_size
+            self.master_secret, b"c ap traffic", self.hashAlgo(self.transcript).digest(), self.digest_size
         )
         return self.c_app_traffic
 
@@ -216,7 +219,7 @@ class KeySchedule:
             raise ValueError("master secret must be computed before server_application_traffic_secret_0.")
     
         self.s_app_traffic = self.hkdf_expand_label(
-            self.master_secret, b"s ap traffic", self.hashAlgo(self.transcript).digest(), self.hashAlgo().digest_size
+            self.master_secret, b"s ap traffic", self.hashAlgo(self.transcript).digest(), self.digest_size
         )
         return self.s_app_traffic
 
