@@ -1,12 +1,7 @@
 import os
 import struct
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    PrivateFormat,
-    PublicFormat,
-    NoEncryption,
-)
+
+from wolfcrypt.ciphers import EccPrivate
 
 from KeySchedule import KeySchedule
 
@@ -72,14 +67,10 @@ class ClientHello:
 
     def _make_key_share(self):
         # Generate ECDH key pair using secp256r1
-        self.private_key = ec.generate_private_key(ec.SECP256R1())
-        public_key = self.private_key.public_key()
-
-        # Serialize the public key using X9.62 UncompressedPoint format
-        serialized_public_key = public_key.public_bytes(
-            encoding=Encoding.X962,
-            format=PublicFormat.UncompressedPoint
-        )
+        self.private_key = EccPrivate.make_key(32)  # 32 bytes key length for secp256r1
+        qx, qy, d = self.private_key.encode_key_raw()  # qx and qy are the public key, d is the private key
+        legacy_form = 4
+        serialized_public_key = legacy_form.to_bytes(1, 'big') + qx + qy
 
         # Construct key_share extension data
         group_id = b'\x00\x17'  # secp256r1
@@ -94,8 +85,4 @@ class ClientHello:
         """Retrieve the ECDH private key in DER format."""
         if self.private_key is None:
             raise ValueError("Private key has not been generated yet.")
-        return self.private_key.private_bytes(
-            encoding=Encoding.DER,
-            format=PrivateFormat.PKCS8,
-            encryption_algorithm=NoEncryption()
-        )
+        return self.private_key

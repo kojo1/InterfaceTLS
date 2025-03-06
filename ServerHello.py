@@ -1,5 +1,7 @@
 import logging
 
+from wolfcrypt.ciphers import EccPublic
+
 class ServerHello:
     def __init__(self):
         self.server_version = None
@@ -72,10 +74,14 @@ class ServerHello:
     def _extract_key_share(self, key_share_data):
         try:
             curve_type = key_share_data[:2]  # Curve type (2 bytes)
-            key_length = int.from_bytes(key_share_data[2:4], 'big')  # Key length (2 bytes)
-            self.server_pub_key = key_share_data[4:4+key_length]  # Public key
+            key_exchange_len = int.from_bytes(key_share_data[2:4], 'big')  # Key length (2 bytes)
+            key_exchange = key_share_data[4:4+key_exchange_len]  # Public key
+            legacy_form = key_exchange[0]  # This must be 4
+            qx = key_exchange[1:1+32]
+            qy = key_exchange[1+32:]
+            self.server_pub_key = EccPublic()
+            self.server_pub_key.decode_key_raw(qx, qy, 7)  # 7 means secp256r1
 
-            logging.debug(f"Curve Type: {curve_type.hex()}, Key Length: {key_length}, Public Key: {self.server_pub_key.hex()}")
         except Exception as e:
             logging.error(f"Failed to extract key share: {e}")
             raise

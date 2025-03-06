@@ -1,5 +1,5 @@
 import logging
-import hmac
+
 from KeySchedule import KeySchedule
 
 class Finished:
@@ -10,7 +10,10 @@ class Finished:
 
     def set_expected_verify_data(self):
         # Calc the expected HMAC at client to validate server one
-        expected_verify_data = hmac.new(self.key_sched.get_s_finished(), self.key_sched.hashAlgo(self.key_sched.transcript).digest(), self.key_sched.hashAlgo).digest()
+        expected_verify_data = self.key_sched.hmacAlgo(
+            self.key_sched.get_s_finished(),
+            self.key_sched.hashAlgo(self.key_sched.transcript).digest()
+        ).digest()
         self.expected_verify_data = expected_verify_data
 
     def do(self, msg):
@@ -22,5 +25,9 @@ class Finished:
         return msg
 
     def make(self):
-        verify_data = hmac.new(self.key_sched.get_c_finished(), self.key_sched.hashAlgo(self.key_sched.transcript).digest(), self.key_sched.hashAlgo).digest()
+        verify_data = self.key_sched.hmacAlgo(
+            self.key_sched.get_c_finished(),
+            self.key_sched.hashAlgo(self.key_sched.transcript).digest(),
+        ).digest()
+
         return verify_data
