@@ -3,7 +3,7 @@ import logging
 from wolfcrypt.ciphers import EccPublic
 
 class ServerHello:
-    def __init__(self):
+    def __init__(self, key_exchange):
         self.server_version = None
         self.random = None
         self.session_id = None
@@ -11,6 +11,7 @@ class ServerHello:
         self.compression_method = None
         self.extensions = {}
         self.server_pub_key = None
+        self.key_exchange = key_exchange
         logging.basicConfig(level=logging.INFO)
 
     def do(self, msg):
@@ -69,24 +70,4 @@ class ServerHello:
 
             # Extract key share (assuming extension_type for Key Share is 51)
             if extension_type == 51:
-                self._extract_key_share(extension_value)
-
-    def _extract_key_share(self, key_share_data):
-        try:
-            curve_type = key_share_data[:2]  # Curve type (2 bytes)
-            key_exchange_len = int.from_bytes(key_share_data[2:4], 'big')  # Key length (2 bytes)
-            key_exchange = key_share_data[4:4+key_exchange_len]  # Public key
-            legacy_form = key_exchange[0]  # This must be 4
-            qx = key_exchange[1:1+32]
-            qy = key_exchange[1+32:]
-            self.server_pub_key = EccPublic()
-            self.server_pub_key.decode_key_raw(qx, qy, 7)  # 7 means secp256r1
-
-        except Exception as e:
-            logging.error(f"Failed to extract key share: {e}")
-            raise
-
-    def getPub(self):
-        if self.server_pub_key is None:
-            raise ValueError("Server public key has not been set. Call do(msg) first.")
-        return self.server_pub_key
+                self.key_exchange.extract_key_share(extension_value)
