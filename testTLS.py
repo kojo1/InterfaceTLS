@@ -10,7 +10,7 @@ from ClientHello import ClientHello
 from ServerHello import ServerHello
 from Finished import Finished
 from KeySchedule import KeySchedule
-from KeyExchange import KeyExchange, KeyExAlgoMlKem768
+from KeyExchange import KeyExchange, KeyExAlgoP256MlKem768
 
 logger = logging.getLogger()
 logging.basicConfig(
@@ -35,7 +35,7 @@ CERTIFICATE_VERIFY = 15
 FINISHED = 20
 
 keySched = KeySchedule()
-keyEx    = KeyExchange(KeyExAlgoMlKem768(), keySched)
+keyEx    = KeyExchange(KeyExAlgoP256MlKem768(), keySched)
 cl_hello = ClientHello(keyEx)
 sv_hello = ServerHello(keyEx)
 finished = Finished(keySched)
