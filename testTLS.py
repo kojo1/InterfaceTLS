@@ -10,7 +10,7 @@ from ClientHello import ClientHello
 from ServerHello import ServerHello
 from Finished import Finished
 from KeySchedule import KeySchedule
-from KeyExchange import KeyExchange
+from KeyExchange import KeyExchange, KeyExAlgoMlKem768
 
 logger = logging.getLogger()
 logging.basicConfig(
@@ -35,10 +35,10 @@ CERTIFICATE_VERIFY = 15
 FINISHED = 20
 
 keySched = KeySchedule()
-cl_hello = ClientHello()
-sv_hello = ServerHello()
+keyEx    = KeyExchange(KeyExAlgoMlKem768(), keySched)
+cl_hello = ClientHello(keyEx)
+sv_hello = ServerHello(keyEx)
 finished = Finished(keySched)
-keyEx    = KeyExchange(keySched)
 hsMsg    = HandShakeMsg(sock, keySched)
 chsMsg   = CryptoHandShakeMsg(sock, keySched)
 appMsg   = AppMsg(sock, keySched)
@@ -49,7 +49,7 @@ hsMsg.send(CLIENT_HELLO, cl_hello.make())               # Send ClientHello
 sv_hello_msg = hsMsg.recv(SERVER_HELLO)                 # Receive ServerHello
 sv_hello.do(sv_hello_msg)                               # Parse ServerHello
 
-keyEx.doExchange(cl_hello.getPriv(), sv_hello.getPub()) # Key Exchange
+keyEx.doExchange() # Key Exchange
 
 chsMsg.calc_keys_and_ivs()
 
