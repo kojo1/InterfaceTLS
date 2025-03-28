@@ -78,6 +78,27 @@ class KeyExAlgoMlKem768(KeyExAlgo):
         assert(self.priv is not None and self._ciphertext is not None)
         return self.priv.decapsulate(self._ciphertext)
 
+class KeyExAlgoP256MlKem768(KeyExAlgo):
+    def __init__(self):
+        self._p256 = KeyExAlgoP256()
+        self._mlkem768 = KeyExAlgoMlKem768()
+
+    @property
+    def supported_group(self):
+        return b"\x11\xeb"
+    
+    def make_key_exchange(self):
+        return self._p256.make_key_exchange() + self._mlkem768.make_key_exchange()
+    
+    def extract_key_exchange(self, key_exchange):
+        key_exchange_p256 = key_exchange[:65]
+        key_exchange_mlkem768 = key_exchange[65:]
+
+        self._p256.extract_key_exchange(key_exchange_p256)
+        self._mlkem768.extract_key_exchange(key_exchange_mlkem768)
+
+    def get_shared_secret(self):
+        return self._p256.get_shared_secret() + self._mlkem768.get_shared_secret()
 
 class KeyExchange():
     def __init__(self, algo, key_sched):
