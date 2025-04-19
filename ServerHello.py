@@ -18,7 +18,6 @@ class ServerHello:
         Parses the ServerHello message and extracts relevant fields, including the server's ECDH public key.
         """
         try:
-            print("MESSAGE:" + str(msg))
             # Parse fixed fields
             self.server_version = msg[:2]
             logging.debug(f"Server Version: {self.server_version.hex()}")

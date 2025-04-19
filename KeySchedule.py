@@ -1,3 +1,4 @@
+from SslKeyLog import SslKeyLog #keyLog for Wireshark
 from wolfcrypt.hashes import Sha256, HmacSha256
 
 def _get_hmac_algo(hashAlgo):
@@ -7,7 +8,7 @@ def _get_hmac_algo(hashAlgo):
         raise ValueError("Unsupported hash algorithm")
 
 class KeySchedule:
-    def __init__(self, hashAlgo=Sha256):
+    def __init__(self, keylog, hashAlgo=Sha256):
         self.hashAlgo = hashAlgo
         self.digest_size = hashAlgo.digest_size
         self.hmacAlgo = _get_hmac_algo(hashAlgo)
@@ -24,19 +25,12 @@ class KeySchedule:
         self.c_app_key_iv = None
         self.s_app_key_iv = None
 
+        self.keylog = keylog
+
     def hkdf_extract(self, salt, ikm):
-        """HKDF Extract フェーズ"""
         return self.hmacAlgo(salt, ikm).digest()
 
     def hkdf_expand_label(self, secret, label, ctx, length):
-        """
-        HKDF Expand Label (TLS 1.3 固有の形式)
-        :param secret: HKDF-Expand に渡すシークレット
-        :param label: TLS 1.3 のラベル (例: "key", "iv")
-        :param context: コンテキスト (例: ハンドシェイクメッセージ)
-        :param length: 必要な出力長
-        :return: 派生された鍵またはデータ
-        """
         print("hkdf_expand_label:" + str(label))
         print("secret: " + secret.hex())
         print("ctx: " + ctx.hex())
@@ -50,13 +44,7 @@ class KeySchedule:
         return self.hkdf_expand(secret, hkdf_label, length)
 
     def hkdf_expand(self, secret, info, length):
-        """
-        HKDF Expand フェーズ
-        :param secret: HKDF-Extract の出力
-        :param info: ラベルなどの拡張情報
-        :param length: 必要な出力長
-        :return: 長さ指定の鍵またはデータ
-        """
+
         hash_len = self.digest_size
         n = (length + hash_len - 1) // hash_len  # 必要なブロック数
         if n > 255:
@@ -74,17 +62,12 @@ class KeySchedule:
         print(f"shared_secret   : {self.shared_secret}")  
 
     def set_early_secret(self, psk=None):
-        """
-        EarlySecret を計算する内部メソッド。
-        PSK (pre-shared key) がない場合はゼロバイト列を使用。
-        """
         if not psk:
             psk = b'\x00' * self.digest_size
         salt = b'\x00' * self.digest_size
         self.early_secret = self.hkdf_extract(salt, psk)
 
     def set_derived_secret(self):
-        """DerivedSecret を計算するメソッド"""
         if not self.early_secret:
             raise ValueError("Early secret must be computed before derived secret.")
         hash = self.hashAlgo(b"").digest()
@@ -95,7 +78,6 @@ class KeySchedule:
         )
 
     def set_hs_secret(self):
-        """Handshake Secret を計算するメソッド"""
         if not self.derived_secret:
             raise ValueError("Derived secret must be computed before handshake secret.")
         if not self.shared_secret:
@@ -107,33 +89,25 @@ class KeySchedule:
         print(f"self.digest: {self.digest.hex()}")
 
     def addMsg(self, handshake_message):
-        """
-        Context を更新するメソッド。
-        ハンドシェイクメッセージを内部 Transcrypt に追加。
-        """
         self.transcript += handshake_message
         return self.transcript
 
     def set_c_hs_traffic(self):
-        """
-        Client Handshake Traffic Secret を計算するメソッド。
-        """
         if not self.hs_secret:
             raise ValueError("Handshake secret must be computed before client handshake traffic secret.")
         self.c_hs_traffic = self.hkdf_expand_label(
             self.hs_secret, b"c hs traffic", self.digest, self.digest_size
         )
-    
+        self.keylog.writeSecret("CLIENT_HANDSHAKE_TRAFFIC_SECRET", self.c_hs_traffic)
+
     def set_s_hs_traffic(self):
-        """
-        Server Handshake Traffic Secret を計算するメソッド。
-        """
         if not self.hs_secret:
             raise ValueError("Handshake secret must be computed before server handshake traffic secret.")
     
         self.s_hs_traffic = self.hkdf_expand_label(
             self.hs_secret, b"s hs traffic", self.digest, self.digest_size
         )
+        self.keylog.writeSecret("SERVER_HANDSHAKE_TRAFFIC_SECRET", self.s_hs_traffic)
 
     def set_s_hs_key_iv(self):
         KEY_LENGTH = 16
@@ -180,9 +154,6 @@ class KeySchedule:
         return self.c_finished
 
     def get_secret_for_master(self):
-        """
-        Secret for Master を計算するメソッド。
-        """
         if not self.hs_secret:
             raise ValueError("Handshake secret must be computed before secret for master.")
     
@@ -192,16 +163,9 @@ class KeySchedule:
         return self.secret_for_master
 
     def set_master_secret(self):
-        """
-        Master Secret を計算する内部メソッド。
-        """
         self.master_secret = self.hkdf_extract(self.get_secret_for_master(), b"\x00" * 32) # 32 should be variable
 
     def set_c_app_traffic(self):
-        """
-        client_application_traffic_secret_0  を計算するメソッド。
-        Need to run just after "Server Finished".
-        """
         if not self.master_secret:
             raise ValueError("master secret must be computed before client_application_traffic_secret_0.")
     
@@ -211,10 +175,6 @@ class KeySchedule:
         return self.c_app_traffic
 
     def set_s_app_traffic(self):
-        """
-        server_application_traffic_secret_0 を計算するメソッド。
-        Need to run just after "Server Finished".
-        """
         if not self.master_secret:
             raise ValueError("master secret must be computed before server_application_traffic_secret_0.")
     
@@ -256,33 +216,3 @@ class KeySchedule:
         for i in range(8):
             iv[-8 + i] ^= seq_bytes[i]
         return bytes(iv)
-
-# 使用例
-if __name__ == "__main__":
-    # 鍵スケジュールを初期化
-    key_schedule = KeySchedule()
-
-    # Pre-Shared Key (PSK) を設定
-    psk = b"example_psk_12345"
-    early_secret = key_schedule.get_early_secret(psk)
-
-    # Derived Secret を計算
-    derived_secret = key_schedule.get_derived_secret()
-
-    # 共通鍵 (ECDHなどで得られるShared Secret)
-    shared_secret = b"example_shared_secret"
-    # handshake_secret = key_schedule.get_hs_secret(shared_secret)
-    handshake_secret = key_schedule.get_hs_secret()
-
-    # Context を更新 (ハンドシェイクメッセージを追加)
-    key_schedule.addMsg(b"handshake_message_1")
-    key_schedule.addMsg(b"handshake_message_2")
-
-    # Client Handshake Traffic Secret を計算
-    client_hs_secret = key_schedule.get_c_hs_traffic()
-
-    # 結果を表示
-    print("Early Secret:", early_secret.hex())
-    print("Derived Secret:", derived_secret.hex())
-    print("Handshake Secret:", handshake_secret.hex())
-    print("Client Handshake Traffic Secret:", client_hs_secret.hex())

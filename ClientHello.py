@@ -1,12 +1,13 @@
 import os
 import struct
 
+from SslKeyLog import SslKeyLog #keyLog for Wireshark
 from wolfcrypt.ciphers import EccPrivate
 
 from KeySchedule import KeySchedule
 
 class ClientHello:
-    def __init__(self):
+    def __init__(self, keylog):
         self.legacy_version = 0x0303  # ProtocolVersion
         self.random = os.urandom(32)  # 32 bytes of random data
         self.legacy_session_id_length = b'\x00\x00'  # Length 0
@@ -15,6 +16,8 @@ class ClientHello:
         self.private_key = None  # To store the ECDH private key
         self.supported_groups = [0x0017] # secp256r1
         self.signature_algorithms = [0x0804] # rsa_pss_rsae_sha256
+        
+        self.keylog = keylog #for Wireshark
 
     def make(self):
         # Build the non-extension part of ClientHello
@@ -32,6 +35,8 @@ class ClientHello:
         # Add extensions
         extensions = self._build_extensions()
         cl_hello_payload = client_hello_base + struct.pack('!H', len(extensions)) + extensions
+
+        self.keylog.setClientRnd(self.random)
 
         return cl_hello_payload
 

@@ -32,32 +32,17 @@ class PlainMsg:
 
 class HandShakeMsg:
     def __init__(self, socket, key_sched):
-        """
-        コンストラクタ
-        :param socket: ソケットオブジェクト
-        """
         self.plain = PlainMsg(socket, key_sched)
 
     def send(self, hs_type: int, hs_payload: bytes):
-        """
-        ハンドシェークメッセージを送信する
-        :param handshake_type: ハンドシェークメッセージタイプ (例: ClientHello, ServerHelloなど)
-        :param content: ハンドシェークメッセージの内容 (bytes)
-        """
         tls_payload = hs_header(hs_type, len(hs_payload)) + hs_payload
         self.plain.send(22, tls_payload)
 
     def recv(self, expected_hs_type: int):
-        # TLS Recordから受信を委譲
         tls_payload = self.plain.recv(22)
         hs_type, hs_payload_len, hs_payload = separate_hs_msg(tls_payload)
         if hs_type != expected_hs_type:
             raise ValueError("Unexpected handshake type: {}".format(hs_type))
-
-        # ハンドシェークメッセージを解析
-        #if len(content) != length:
-        #    raise ValueError("Handshake message length mismatch")
-
         return hs_payload
 
 def encrypt(key, iv, record_header, record_content):
@@ -158,10 +143,6 @@ class CryptoHandShakeMsg:
     
 class AppMsg:
     def __init__(self, socket, key_sched):
-        """
-        コンストラクタ
-        :param socket: ソケットオブジェクト
-        """
         self.key_sched = key_sched
         self.crypto = CryptoMsg(socket, key_sched)
 
