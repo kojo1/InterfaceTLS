@@ -2,7 +2,7 @@
 
 import logging
 import socket
-from debug import dump_hex
+import dump_hex
 
 from SslKeyLog import SslKeyLog #keyLog for Wireshark
 from HandShakeMsg import HandShakeMsg, CryptoHandShakeMsg, AppMsg
@@ -37,7 +37,7 @@ CERTIFICATE_VERIFY = 15
 FINISHED = 20
 
 keySched = KeySchedule(keylog)
-keyEx    = KeyExchange(keySched, KeyExAlgoP256MlKem768())
+keyEx    = KeyExchange(keySched, KeyExAlgoMlKem768())
 cl_hello = ClientHello(keylog, keyEx)
 sv_hello = ServerHello(keyEx)
 finished = Finished(keySched)

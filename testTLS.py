@@ -2,7 +2,7 @@
 
 import logging
 import socket
-from debug import dump_hex
+import dump_hex
 
 from SslKeyLog import SslKeyLog #keyLog for Wireshark
 from HandShakeMsg import HandShakeMsg, CryptoHandShakeMsg, AppMsg
