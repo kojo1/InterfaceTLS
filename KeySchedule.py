@@ -1,3 +1,5 @@
+from logger_config import logger
+
 from SslKeyLog import SslKeyLog #keyLog for Wireshark
 from wolfcrypt.hashes import Sha256, HmacSha256
 
@@ -31,9 +33,9 @@ class KeySchedule:
         return self.hmacAlgo(salt, ikm).digest()
 
     def hkdf_expand_label(self, secret, label, ctx, length):
-        print("hkdf_expand_label:" + str(label))
-        print("secret: " + secret.hex())
-        print("ctx: " + ctx.hex())
+        logger.debug("hkdf_expand_label:" + str(label))
+        logger.debug("secret: " + secret.hex())
+        logger.debug("ctx: " + ctx.hex())
 
         full_label = b"tls13 " + label
         hkdf_label = (
@@ -59,7 +61,7 @@ class KeySchedule:
     
     def set_shared_secret(self, secret):
         self.shared_secret = secret
-        print(f"shared_secret   : {self.shared_secret}")  
+        logger.debug(f"shared_secret   : {self.shared_secret}")  
 
     def set_early_secret(self, psk=None):
         if not psk:
@@ -71,7 +73,7 @@ class KeySchedule:
         if not self.early_secret:
             raise ValueError("Early secret must be computed before derived secret.")
         hash = self.hashAlgo(b"").digest()
-        print("hash: " + str({''.join(f'{byte:02x}' for byte in hash )}))
+        logger.debug("hash: " + str({''.join(f'{byte:02x}' for byte in hash )}))
 
         self.derived_secret = self.hkdf_expand_label(
             self.early_secret, b"derived", hash, self.digest_size
@@ -83,10 +85,10 @@ class KeySchedule:
         if not self.shared_secret:
             raise ValueError("Shared secret must be computed before handshake secret.")
         self.hs_secret = self.hkdf_extract(self.derived_secret, self.shared_secret)
-        print(f"shared_secret   : {self.shared_secret}")  
-        print(f"handshake_secret: {self.hs_secret.hex()}")        
+        logger.debug(f"shared_secret   : {self.shared_secret}")  
+        logger.debug(f"handshake_secret: {self.hs_secret.hex()}")        
         self.digest = self.hashAlgo(self.transcript).digest()
-        print(f"self.digest: {self.digest.hex()}")
+        logger.debug(f"self.digest: {self.digest.hex()}")
 
     def addMsg(self, handshake_message):
         self.transcript += handshake_message
