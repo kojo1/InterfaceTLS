@@ -33,7 +33,7 @@ class KeyExAlgoP256(KeyExAlgo):
     def __init__(self):
         self._priv = None
         self._pub = None
-    
+
     @property
     def supported_group(self):
         return b"\x00\x17"  # ECC_SECP256R1
@@ -64,7 +64,7 @@ class KeyExAlgoMlKem768(KeyExAlgo):
     @property
     def supported_group(self):
         return b"\x02\x01"  # ML-KEM 768
-    
+
     def make_key_exchange(self):
         self.priv = MlKemPrivate.make_key(MlKemType.ML_KEM_768)
         return self.priv.encode_pub_key()
@@ -84,10 +84,10 @@ class KeyExAlgoP256MlKem768(KeyExAlgo):
     @property
     def supported_group(self):
         return b"\x11\xeb"
-    
+
     def make_key_exchange(self):
         return self._p256.make_key_exchange() + self._mlkem768.make_key_exchange()
-    
+
     def extract_key_exchange(self, key_exchange):
         key_exchange_p256 = key_exchange[:65]
         key_exchange_mlkem768 = key_exchange[65:]
@@ -113,7 +113,7 @@ class KeyExchange():
 
     def make_key_share(self):
         key_exchange = self._algo.make_key_exchange()
-        key_share_entry = self._algo.supported_group + pack('!H', len(key_exchange)) + key_exchange 
+        key_share_entry = self._algo.supported_group + pack('!H', len(key_exchange)) + key_exchange
         return pack('!H', len(key_share_entry)) + key_share_entry
 
     def extract_key_share(self, key_share_entry):

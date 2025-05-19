@@ -23,13 +23,13 @@ class ClientHello:
     def make(self):
         # Build the non-extension part of ClientHello
         client_hello_base = struct.pack(
-            '!H32s2sB', 
+            '!H32s2sB',
             self.legacy_version,
             self.random,
             self.legacy_session_id_length,
             len(self.cipher_suites) * 2
         ) + b''.join(struct.pack('!H', suite) for suite in self.cipher_suites) + struct.pack(
-            '!B', 
+            '!B',
             len(self.legacy_compression_methods)
         ) + b''.join(struct.pack('!B', method) for method in self.legacy_compression_methods)
 
@@ -38,7 +38,7 @@ class ClientHello:
         cl_hello_payload = client_hello_base + struct.pack('!H', len(extensions)) + extensions
 
         self.keylog.setClientRnd(self.random)
-        
+
         return cl_hello_payload
 
     def _build_extensions(self):

@@ -6,7 +6,7 @@ class Finished:
     def __init__(self, key_sched: KeySchedule):
         logging.basicConfig(level=logging.INFO)
         self.key_sched = key_sched
-        self.expected_verify_data = None 
+        self.expected_verify_data = None
 
     def set_expected_verify_data(self):
         # Calc the expected HMAC at client to validate server one
