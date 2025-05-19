@@ -42,7 +42,6 @@ cl_hello = ClientHello(keylog, keyEx)
 sv_hello = ServerHello(keyEx)
 finished = Finished(keySched)
 
-keyEx    = KeyExchange(keySched)
 hsMsg    = HandShakeMsg(sock, keySched)
 chsMsg   = CryptoHandShakeMsg(sock, keySched)
 appMsg   = AppMsg(sock, keySched)

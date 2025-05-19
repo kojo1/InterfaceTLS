@@ -69,19 +69,4 @@ class ServerHello:
 
             # Extract key share (assuming extension_type for Key Share is 51)
             if extension_type == 51:
-                self._extract_key_share(extension_value)
-
-    def _parse_extensions(self, extensions_data):
-        offset = 0
-        while offset < len(extensions_data):
-            extension_type = int.from_bytes(extensions_data[offset:offset+2], 'big')
-            extension_length = int.from_bytes(extensions_data[offset+2:offset+4], 'big')
-            extension_value = extensions_data[offset+4:offset+4+extension_length]
-            logging.debug(f"Extension Type: {extension_type}, Length: {extension_length}, Value: {extension_value.hex()}")
-            offset += 4 + extension_length
-
-            self.extensions[extension_type] = extension_value
-
-            # Extract key share (assuming extension_type for Key Share is 51)
-            if extension_type == 51:
                 self.key_exchange.extract_key_share(extension_value)
