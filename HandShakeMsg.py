@@ -10,7 +10,7 @@ def separate_hs_msg(hs_msg: bytes):
     hs_type = hs_msg[0]
     hs_payload_len = hs_msg[1:4]
     hs_payload = hs_msg[4:]
-    
+
     return hs_type, hs_payload_len, hs_payload
 
 class PlainMsg:
@@ -25,9 +25,9 @@ class PlainMsg:
     def recv(self, expected_content_type: int):
         content_type, version, tls_payload_len, tls_payload = separate_tls_msg(self.tls_record.recv())
         if content_type != expected_content_type:
-            raise ValueError("Unexpected content type: {}".format(content_type)) 
+            raise ValueError("Unexpected content type: {}".format(content_type))
         self.key_sched.addMsg(tls_payload)
-        
+
         return tls_payload
 
 class HandShakeMsg:
@@ -109,7 +109,7 @@ class CryptoMsg:
 
         self.key_sched.addMsg(content)
         self.recNum += 1
-        
+
         return content
 
 class CryptoHandShakeMsg:
@@ -140,7 +140,7 @@ class CryptoHandShakeMsg:
         if hs_type != expected_hs_type:
             raise ValueError("Unexpected hs_type: {}".format(hs_type))
         return hs_payload
-    
+
 class AppMsg:
     def __init__(self, socket, key_sched):
         self.key_sched = key_sched

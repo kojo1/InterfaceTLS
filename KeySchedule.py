@@ -58,10 +58,10 @@ class KeySchedule:
             previous_block = self.hmacAlgo(secret, previous_block + info + bytes([i])).digest()
             output += previous_block
         return output[:length]
-    
+
     def set_shared_secret(self, secret):
         self.shared_secret = secret
-        logger.debug(f"shared_secret   : {self.shared_secret}")  
+        logger.debug(f"shared_secret   : {self.shared_secret}")
 
     def set_early_secret(self, psk=None):
         if not psk:
@@ -85,8 +85,8 @@ class KeySchedule:
         if not self.shared_secret:
             raise ValueError("Shared secret must be computed before handshake secret.")
         self.hs_secret = self.hkdf_extract(self.derived_secret, self.shared_secret)
-        logger.debug(f"shared_secret   : {self.shared_secret}")  
-        logger.debug(f"handshake_secret: {self.hs_secret.hex()}")        
+        logger.debug(f"shared_secret   : {self.shared_secret}")
+        logger.debug(f"handshake_secret: {self.hs_secret.hex()}")
         self.digest = self.hashAlgo(self.transcript).digest()
         logger.debug(f"self.digest: {self.digest.hex()}")
 
@@ -105,7 +105,7 @@ class KeySchedule:
     def set_s_hs_traffic(self):
         if not self.hs_secret:
             raise ValueError("Handshake secret must be computed before server handshake traffic secret.")
-    
+
         self.s_hs_traffic = self.hkdf_expand_label(
             self.hs_secret, b"s hs traffic", self.digest, self.digest_size
         )
@@ -117,7 +117,7 @@ class KeySchedule:
         IV_LENGTH = 12
         iv = self.hkdf_expand_label(self.s_hs_traffic, b"iv", b"", IV_LENGTH)
         self.s_hs_key_iv = key, iv
-    
+
     def get_s_hs_key_iv(self):
         # Need to check self.s_hs_key_iv
         return self.s_hs_key_iv
@@ -128,7 +128,7 @@ class KeySchedule:
         IV_LENGTH = 12
         iv = self.hkdf_expand_label(self.c_hs_traffic, b"iv", b"", IV_LENGTH)
         self.c_hs_key_iv = key, iv
-    
+
     def get_c_hs_key_iv(self):
         # Need to check self.c_hs_key_iv
         return self.c_hs_key_iv
@@ -138,7 +138,7 @@ class KeySchedule:
             raise ValueError("Client Handshake Secret must be computed before Client Finished")
 
         self.c_finished = self.hkdf_expand_label(
-           self.c_hs_traffic, b"finished", b"", self.digest_size 
+           self.c_hs_traffic, b"finished", b"", self.digest_size
         )
 
     def set_s_finished(self):
@@ -146,19 +146,19 @@ class KeySchedule:
             raise ValueError("Server Handshake Secret must be computed before Server Finished")
 
         self.s_finished = self.hkdf_expand_label(
-           self.s_hs_traffic, b"finished", b"", self.digest_size 
+           self.s_hs_traffic, b"finished", b"", self.digest_size
         )
 
     def get_s_finished(self):
         return self.s_finished
-    
+
     def get_c_finished(self):
         return self.c_finished
 
     def get_secret_for_master(self):
         if not self.hs_secret:
             raise ValueError("Handshake secret must be computed before secret for master.")
-    
+
         self.secret_for_master = self.hkdf_expand_label(
             self.hs_secret, b"derived", self.hashAlgo(b"").digest(), self.digest_size
         )
@@ -170,7 +170,7 @@ class KeySchedule:
     def set_c_app_traffic(self):
         if not self.master_secret:
             raise ValueError("master secret must be computed before client_application_traffic_secret_0.")
-    
+
         self.c_app_traffic = self.hkdf_expand_label(
             self.master_secret, b"c ap traffic", self.hashAlgo(self.transcript).digest(), self.digest_size
         )
@@ -179,7 +179,7 @@ class KeySchedule:
     def set_s_app_traffic(self):
         if not self.master_secret:
             raise ValueError("master secret must be computed before server_application_traffic_secret_0.")
-    
+
         self.s_app_traffic = self.hkdf_expand_label(
             self.master_secret, b"s ap traffic", self.hashAlgo(self.transcript).digest(), self.digest_size
         )
@@ -191,7 +191,7 @@ class KeySchedule:
         IV_LENGTH = 12
         iv = self.hkdf_expand_label(self.c_app_traffic, b"iv", b"", IV_LENGTH)
         self.c_app_key_iv = key, iv
-    
+
     def set_s_app_key_iv(self):
         KEY_LENGTH = 16
         key = self.hkdf_expand_label(self.s_app_traffic, b"key", b"", KEY_LENGTH)

@@ -42,7 +42,6 @@ cl_hello = ClientHello(keylog, keyEx)
 sv_hello = ServerHello(keyEx)
 finished = Finished(keySched)
 
-keyEx    = KeyExchange(keySched)
 hsMsg    = HandShakeMsg(sock, keySched)
 chsMsg   = CryptoHandShakeMsg(sock, keySched)
 appMsg   = AppMsg(sock, keySched)
@@ -52,7 +51,7 @@ hsMsg.send(CLIENT_HELLO, cl_hello.make())               # Send ClientHello
 sv_hello.do(hsMsg.recv(SERVER_HELLO))                   # Receive and Parse ServerHello
 
 keyEx.doExchange()                                      # Key Exchange
-chsMsg.calc_keys_and_ivs()                              # set key, IV for crypted handshake message 
+chsMsg.calc_keys_and_ivs()                              # set key, IV for crypted handshake message
 
 enc_exts_msg = chsMsg.recv(ENCRYPTED_EXTENTIONS)        # Receive Encrypted Server Hello
 cert_msg = chsMsg.recv(CERTIFICATE)                     # Receive Certificate

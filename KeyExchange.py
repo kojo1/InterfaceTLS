@@ -32,7 +32,7 @@ class KeyExAlgoP256(KeyExAlgo):
     def __init__(self):
         self._priv = None
         self._pub = None
-    
+
     @property
     def supported_group(self):
         return b"\x00\x17"  # ECC_SECP256R1
@@ -70,7 +70,7 @@ class KeyExchange():
 
     def make_key_share(self):
         key_exchange = self._algo.make_key_exchange()
-        key_share_entry = self._algo.supported_group + pack('!H', len(key_exchange)) + key_exchange 
+        key_share_entry = self._algo.supported_group + pack('!H', len(key_exchange)) + key_exchange
         return pack('!H', len(key_share_entry)) + key_share_entry
 
     def extract_key_share(self, key_share_entry):
